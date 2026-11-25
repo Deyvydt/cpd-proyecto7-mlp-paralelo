@@ -71,6 +71,7 @@ def main():
                 "T_p": round(r["T_p"], 4),
                 "t_comp": round(r["t_comp"], 4),
                 "t_comm": round(r["t_comm"], 4),
+                "t_startup": round(r["t_startup"], 4),
                 "t_fase1": round(r["t_fase1"], 4),
                 "t_fase2_us": round(r["t_fase2"] * 1e6, 3),
                 "speedup": round(S, 4),

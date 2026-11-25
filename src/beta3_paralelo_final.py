@@ -105,36 +105,48 @@ def reduccion_en_arbol(A, idx):
 def ejecutar(p, n):
     ruta, n_train = preparar_datos(n, DIR_TMP)      # linea 1 (division unica)
 
-    t_ini = time.perf_counter()
-
+    # --- Arranque del pool: se mide APARTE del algoritmo ---
+    # Crear los p procesos (y, con spawn, importar las librerias en cada uno) es un
+    # costo de inicializacion del entorno de ejecucion, no del algoritmo. En una
+    # aplicacion real el pool se crea una vez y se reutiliza. Ademas, la linea base
+    # T_s = p * t_1 es tiempo de computo puro, asi que incluir el arranque solo en
+    # T_p haria la comparacion injusta.
     t0 = time.perf_counter()
-    with _contexto().Pool(
-        processes=p, initializer=_init, initargs=(ruta,)
-    ) as pool:
+    pool = _contexto().Pool(processes=p, initializer=_init, initargs=(ruta,))
+    t_startup = time.perf_counter() - t0
+
+    try:
+        t_ini = time.perf_counter()
+
+        t0 = time.perf_counter()
         resultados = pool.map(_tarea, range(p))     # FASE 1 (CREW)
-    t_fase1 = time.perf_counter() - t0
+        t_fase1 = time.perf_counter() - t0
 
-    resultados.sort(key=lambda r: r[0])
-    A = [r[1] for r in resultados]
-    idx = [r[0] for r in resultados]                # idx[s] <- s
-    epocas_tot = sum(r[2] for r in resultados)
-    t_fit_max = max(r[3] for r in resultados)       # computo puro del proceso mas lento
-    t_fit_prom = sum(r[3] for r in resultados) / p
+        resultados.sort(key=lambda r: r[0])
+        A = [r[1] for r in resultados]
+        idx = [r[0] for r in resultados]                # idx[s] <- s
+        epocas_tot = sum(r[2] for r in resultados)
+        t_fit_max = max(r[3] for r in resultados)       # computo puro del proceso mas lento
+        t_fit_prom = sum(r[3] for r in resultados) / p
 
-    t0 = time.perf_counter()
-    A_best, s_best, rondas, comparaciones = reduccion_en_arbol(A, idx)   # FASE 2 (EREW)
-    t_fase2 = time.perf_counter() - t0
+        t0 = time.perf_counter()
+        A_best, s_best, rondas, comparaciones = reduccion_en_arbol(A, idx)   # FASE 2 (EREW)
+        t_fase2 = time.perf_counter() - t0
 
-    shutil.copy(os.path.join(DIR_TMP, f"modelo_{s_best}.joblib"), "mlp_model.joblib")  # FASE 3
-    t_total = time.perf_counter() - t_ini
+        shutil.copy(os.path.join(DIR_TMP, f"modelo_{s_best}.joblib"), "mlp_model.joblib")  # FASE 3
+        t_total = time.perf_counter() - t_ini
 
-    # t_comm = todo lo que no es computo puro: creacion de procesos, envio de datos,
-    # recoleccion de resultados y reduccion.
-    t_comm = t_total - t_fit_max
+        # t_comm = todo lo que no es computo puro: creacion de procesos, envio de datos,
+        # recoleccion de resultados y reduccion.
+        t_comm = t_total - t_fit_max
 
-    flops = flops_entrenamiento(n_train, epocas_tot)
+        flops = flops_entrenamiento(n_train, epocas_tot)
+    finally:
+        pool.close()
+        pool.join()
+
     return {
-        "p": p, "n": n, "n_train": n_train,
+        "p": p, "n": n, "n_train": n_train, "t_startup": t_startup,
         "T_p": t_total,
         "t_fase1": t_fase1, "t_fase2": t_fase2,
         "t_comp": t_fit_max, "t_comp_prom": t_fit_prom, "t_comm": t_comm,
@@ -156,6 +168,7 @@ def main():
     print(f"[BETA3 final] p={r['p']} n={r['n']}")
     print(f"  mejor semilla s* = {r['semilla_ganadora']}   accuracy = {r['accuracy']:.4f}")
     print(f"  T_p = {r['T_p']:.3f} s  (computo {r['t_comp']:.3f} s, comunicacion {r['t_comm']:.3f} s)")
+    print(f"  arranque del pool (medido aparte): {r['t_startup']:.3f} s")
     print(f"  reduccion: {r['rondas_reduccion']} rondas, {r['comparaciones']} comparaciones")
     print(f"  FLOPs = {r['flops']:.3e}   FLOPS = {r['flops_por_seg']:.3e}")
     if args.json:

@@ -125,7 +125,11 @@ def main():
         _, ym = serie(filas, n, "t_comm")
         axes[0].plot(x, yc, "o-", color=COLORES[n], label=f"n = {int(n)}")
         axes[1].plot(x, ym, "s--", color=COLORES[n], label=f"n = {int(n)}")
-    for ax, t in zip(axes, ["Tiempo de computo", "Tiempo de comunicacion / overhead"]):
+    for n in ns:
+        x, ys = serie(filas, n, "t_startup")
+        axes[1].plot(x, ys, "^:", color=COLORES[n], alpha=.5)
+    for ax, t in zip(axes, ["Tiempo de computo",
+                            "Comunicacion (cuadrados) y arranque del pool (triangulos)"]):
         ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
         ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
         ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("Tiempo [s]")

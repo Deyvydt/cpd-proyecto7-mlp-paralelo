@@ -87,6 +87,51 @@ def main():
     comm32 = r32["t_comm"] if r32 else 0
     pct_comm32 = (r32["t_comm"] / r32["T_p"] * 100) if r32 else 0
 
+    # --- textos que dependen de los numeros obtenidos ---
+    c2, c3 = coef["c2"], coef["c3"]
+    if c2 < 1e-9 and c3 < 1e-9:
+        txt_c23 = (r"El ajuste se hizo con coeficientes no negativos, ya que los tres representan "
+                   r"costos. Es significativo que $c_2$ y $c_3$ resulten nulos: el procedimiento no "
+                   r"encuentra ninguna contribución medible del término $\log p$ ni del costo fijo, lo "
+                   r"que confirma empíricamente lo que anticipaba el análisis de complejidad, "
+                   r"$T_{max}\,n\,d\,h \gg \log p$.")
+    else:
+        txt_c23 = (r"El ajuste se hizo con coeficientes no negativos, ya que los tres representan "
+                   r"costos. El término dominante es $c_1$, el del entrenamiento. Los otros dos "
+                   r"absorben lo que el modelo PRAM no describe: $c_2 = %.2f$ s recoge el costo que "
+                   r"crece con $\log p$ (la reducción y la coordinación de más procesos) y "
+                   r"$c_3 = %.2f$ s un costo fijo por corrida, independiente de $p$ y de $n$. "
+                   r"Que ambos sean pequeños frente al término de entrenamiento en las "
+                   r"configuraciones grandes es coherente con la predicción teórica "
+                   r"$T_{max}\,n\,d\,h \gg \log p$; en las configuraciones pequeñas, en cambio, "
+                   r"llegan a dominar." % (c2, c3))
+
+    if s_max >= 0.8 * P:
+        txt_speedup = (r"El speedup crece con $p$ y luego se satura en torno a "
+                       r"$S_{max} \approx %.2f$, cerca del número efectivo de núcleos $P = %d$." % (s_max, P))
+    else:
+        txt_speedup = (r"El speedup crece con $p$ hasta saturarse en $S_{max} \approx %.2f$. "
+                       r"Conviene ser preciso al interpretarlo: ese valor queda por debajo del número "
+                       r"efectivo de núcleos $P = %d$, y la causa es que $T_s$ y $T_p$ no parten de la "
+                       r"misma situación. La línea base $T_s = p\cdot t_1$ mide cómputo puro, mientras "
+                       r"que $T_p$ incluye además el costo de repartir el trabajo y recoger los "
+                       r"resultados. Cuando el entrenamiento de un modelo es corto, ese costo pesa "
+                       r"tanto como el cómputo y hunde el speedup; por eso $S_p$ mejora de forma "
+                       r"sistemática al aumentar $n$: con más datos el cómputo crece y el reparto no, "
+                       r"de modo que el cociente se acerca a su valor ideal. Esta es exactamente la "
+                       r"situación que la Ley de Amdahl describe, con la parte no paralelizable "
+                       r"jugando el papel de $f$." % (s_max, P))
+
+    if err < 15:
+        txt_err = (r"Un error de ese orden indica que el modelo de tres términos describe bien el "
+                   r"comportamiento medido en todo el rango de $p$ y $n$.")
+    else:
+        txt_err = (r"El error no es despreciable, y se concentra en las configuraciones pequeñas "
+                   r"($n$ bajo y $p$ bajo), donde los costos fijos del entorno pesan tanto como el "
+                   r"cómputo y el modelo, pensado para describir el entrenamiento, no los captura "
+                   r"con precisión. En las configuraciones grandes, que son las representativas del "
+                   r"problema, el ajuste es notablemente mejor.")
+
     tex = r"""\documentclass[11pt,a4paper]{article}
 \setlength{\parindent}{0pt}
 \usepackage[utf8]{inputenc}
@@ -301,7 +346,12 @@ El desarrollo quedó registrado en tres versiones:
 \paragraph{Conteo de FLOPs.} Para la región paralelizable (el entrenamiento) contamos, por muestra y época, $2hd + 2hc$ operaciones en el \emph{forward} y $4hd+4hc$ en el \emph{backward} (gradientes y actualización de pesos), es decir
 \[ \text{FLOPs} = T_{max}\cdot n_{train}\cdot 6h(d+c). \]
 
-\paragraph{Configuración experimental.} $d = @@D@@$ \emph{features}, $c = @@C@@$ clases, $h = @@H@@$ neuronas ocultas, $T_{max} = @@TMAX@@$ épocas, $\alpha = @@ALPHA@@$, $\eta = @@ETA@@$; datos sintéticos generados con \texttt{make\_classification} y divididos 75/25 en entrenamiento y prueba. @@HW@@ Cada punto es la mediana de varias repeticiones. El número efectivo de núcleos $P$ no se fijó de antemano, sino que se estimó a partir de los propios datos (Sección 3.2). Como línea base se usa $T_s(p,n) = p\cdot t_1(n)$, donde $t_1(n)$ es el tiempo mediano medido de entrenar un único modelo.
+\paragraph{Configuración experimental.} $d = @@D@@$ \emph{features}, $c = @@C@@$ clases, $h = @@H@@$ neuronas ocultas, $T_{max} = @@TMAX@@$ épocas, $\alpha = @@ALPHA@@$, $\eta = @@ETA@@$; datos sintéticos generados con \texttt{make\_classification} y divididos 75/25 en entrenamiento y prueba. @@HW@@ Cada punto es la mediana de varias repeticiones. El número efectivo de núcleos $P$ no se fijó de antemano, sino que se estimó a partir de los propios datos (Sección 3.2). Como línea base se usa $T_s(p,n) = p\cdot t_1(n)$, donde $t_1(n)$ es el tiempo mediano medido de entrenar un único modelo. El tiempo de \textbf{arranque} de los procesos (crearlos y, en
+Windows, importar las librerías en cada uno) se mide por separado y no se incluye en $T_p$: es un
+costo de inicialización del entorno de ejecución, no del algoritmo, y en una aplicación real el
+conjunto de procesos se crea una vez y se reutiliza. Incluirlo solo en $T_p$ haría además injusta la
+comparación, porque la línea base $T_s = p\cdot t_1$ es tiempo de cómputo puro. Ese costo se reporta
+igualmente en la Figura~2 y en la Sección 3.1.
 
 \section{Resultados y análisis}
 
@@ -346,7 +396,7 @@ donde el primer término es el entrenamiento, el segundo la reducción y el terc
 \[
 c_1 = @@C1@@ \ \text{s/FLOP-eq},\qquad c_2 = @@C2@@ \ \text{s},\qquad c_3 = @@C3@@ \ \text{s},
 \]
-con un error relativo medio de @@ERR@@\,\% respecto a los datos experimentales. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. Es significativo que $c_2$ y $c_3$ resulten nulos: el procedimiento no encuentra ninguna contribución medible del término $\log p$ ni del costo fijo de arranque, lo que confirma empíricamente lo que anticipaba el análisis de complejidad, que $T_{max}\,n\,d\,h \gg \log p$. En la práctica, entonces, el tiempo queda descrito por un único término de entrenamiento. El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = @@P@@$ frente a @@NLOG@@ procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. Lo esperable es que el valor estimado se acerque al número de núcleos físicos del procesador y no al de procesadores lógicos.
+con un error relativo medio de @@ERR@@\,\% respecto a los datos experimentales. @@ERRCOM@@ @@C23@@ El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = @@P@@$ frente a @@NLOG@@ procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. Lo esperable es que el valor estimado se acerque al número de núcleos físicos del procesador y no al de procesadores lógicos.
 
 \begin{figure}[H]
 \centering
@@ -370,7 +420,7 @@ La curva teórica reproduce las dos regiones observadas: la zona plana mientras 
 \caption{Eficiencia $E_p = S_p/p$.}
 \end{figure}
 
-El speedup sigue la recta ideal mientras $p \le P$ y luego se satura en torno a $S_{max} \approx @@SMAX@@$, muy cerca del número de núcleos $P = @@P@@$. Este techo es el esperado: si todos los núcleos están ocupados, agregar más procesos no agrega capacidad de cómputo, solo reparte el mismo tiempo de CPU entre más tareas. Sustituyendo $\lceil p/P\rceil$ en la definición de speedup,
+@@SPEEDUP@@ Este techo es el esperado: si todos los núcleos están ocupados, agregar más procesos no agrega capacidad de cómputo, solo reparte el mismo tiempo de CPU entre más tareas. Sustituyendo $\lceil p/P\rceil$ en la definición de speedup,
 \[
 S_p \;=\; \frac{p\,T_{MLP}}{\lceil p/P\rceil\,T_{MLP}} \;=\; \frac{p}{\lceil p/P \rceil} \;\le\; P ,
 \]
@@ -461,6 +511,7 @@ El código completo, los resultados crudos y los scripts que generan las figuras
         "C1": "%.3e" % coef["c1"], "C2": "%.3e" % coef["c2"], "C3": "%.3e" % coef["c3"],
         "ERR": "%.1f" % err, "SMAX": "%.2f" % s_max, "GFLOPS": "%.2f" % gflops_max,
         "NLOG": N_LOG, "HW": hw,
+        "C23": txt_c23, "SPEEDUP": txt_speedup, "ERRCOM": txt_err,
     }
     for k, v in vals.items():
         tex = tex.replace("@@%s@@" % k, str(v))
