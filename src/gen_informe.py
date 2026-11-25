@@ -270,7 +270,7 @@ Pusimos el costo al lado de cada línea para que la complejidad se pueda leer di
 
 \subsection{Implementación y versiones beta}
 
-El código está en Python y usa \texttt{scikit-learn} (\texttt{MLPClassifier}) para los modelos y el módulo \texttt{multiprocessing} para el paralelismo. Usamos procesos y no hilos porque el \emph{GIL} de CPython impide que varios hilos ejecuten bytecode a la vez, de modo que con hilos no habría paralelismo real de cómputo; cada proceso recibe una copia de los datos de entrenamiento, que es la traducción práctica de la lectura concurrente del modelo CREW. Se fija \texttt{OMP\_NUM\_THREADS=1} en cada proceso para que la biblioteca de álgebra lineal no cree hilos extra y la medición de $p$ sea limpia.
+El código está en Python y usa \texttt{scikit-learn} (\texttt{MLPClassifier}) para los modelos y el módulo \texttt{multiprocessing} para el paralelismo. Usamos procesos y no hilos porque el \emph{GIL} de CPython impide que varios hilos ejecuten bytecode a la vez, de modo que con hilos no habría paralelismo real de cómputo; cada proceso recibe una copia de los datos de entrenamiento, que es la traducción práctica de la lectura concurrente del modelo CREW. Se fija \texttt{OMP\_NUM\_THREADS=1} en cada proceso para que la biblioteca de álgebra lineal no cree hilos extra y la medición de $p$ sea limpia. El contexto de \texttt{multiprocessing} se elige automáticamente: \texttt{fork} en Linux y macOS, donde el proceso hijo hereda la memoria del padre, y \texttt{spawn} en Windows, donde cada proceso arranca de cero y recibe los datos por serialización; esta diferencia se refleja en el tiempo de comunicación medido.
 
 El desarrollo quedó registrado en tres versiones:
 

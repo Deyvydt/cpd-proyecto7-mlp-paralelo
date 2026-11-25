@@ -28,6 +28,24 @@ import joblib
 from common import cargar_datos, entrenar_y_evaluar, flops_entrenamiento
 
 _DATOS = {}
+
+
+def _contexto():
+    """
+    Devuelve el contexto de multiprocessing disponible.
+
+    'fork' (Linux/macOS) es mas barato porque el hijo hereda la memoria del padre.
+    En Windows no existe, asi que se usa 'spawn': cada proceso arranca de cero y
+    recibe los datos por serializacion, lo que aumenta el tiempo de comunicacion.
+    """
+    import multiprocessing as _mp
+    for nombre in ("fork", "spawn"):
+        try:
+            return _mp.get_context(nombre)
+        except ValueError:
+            continue
+    return _mp.get_context()
+
 DIR_TMP = "modelos_tmp"
 
 
@@ -71,7 +89,7 @@ def ejecutar(p, n):
     t_ini = time.perf_counter()
 
     t0 = time.perf_counter()
-    with mp.get_context("fork").Pool(
+    with _contexto().Pool(
         processes=p, initializer=_init, initargs=(X_tr, y_tr, X_te, y_te)
     ) as pool:
         resultados = pool.map(_tarea, range(p))     # FASE 1 (CREW)

@@ -23,6 +23,24 @@ from common import cargar_datos, entrenar_y_evaluar
 _DATOS = {}
 
 
+def _contexto():
+    """
+    Devuelve el contexto de multiprocessing disponible.
+
+    'fork' (Linux/macOS) es mas barato porque el hijo hereda la memoria del padre.
+    En Windows no existe, asi que se usa 'spawn': cada proceso arranca de cero y
+    recibe los datos por serializacion, lo que aumenta el tiempo de comunicacion.
+    """
+    import multiprocessing as _mp
+    for nombre in ("fork", "spawn"):
+        try:
+            return _mp.get_context(nombre)
+        except ValueError:
+            continue
+    return _mp.get_context()
+
+
+
 def _init(X_tr, y_tr, X_te, y_te):
     """Cada proceso recibe una copia de los datos (lectura concurrente, CREW)."""
     _DATOS["d"] = (X_tr, y_tr, X_te, y_te)
@@ -43,7 +61,7 @@ def main():
     X_tr, X_te, y_tr, y_te = cargar_datos(args.n)
 
     t0 = time.perf_counter()
-    with mp.get_context("fork").Pool(
+    with _contexto().Pool(
         processes=args.p, initializer=_init, initargs=(X_tr, y_tr, X_te, y_te)
     ) as pool:
         resultados = pool.map(_tarea, range(args.p))          # fase 1: for all ... pardo
