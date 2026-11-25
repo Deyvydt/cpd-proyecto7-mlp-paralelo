@@ -59,10 +59,12 @@ def preparar_datos(n, dir_tmp):
     return ruta, len(X_tr)
 
 
-def _init(ruta):
-    """Cada proceso lee la particion compartida desde disco (CREW)."""
+def _init(ruta, barrera=None):
+    """Cada proceso lee la particion compartida desde disco (CREW) y avisa que ya esta listo."""
     d = np.load(ruta)
     _DATOS["d"] = (d["X_tr"], d["y_tr"], d["X_te"], d["y_te"])
+    if barrera is not None:
+        barrera.wait()
 
 
 def _tarea(semilla):
@@ -80,9 +82,12 @@ def main():
     ruta, _ = preparar_datos(args.n, "modelos_tmp")
 
     t0 = time.perf_counter()
-    with _contexto().Pool(
-        processes=args.p, initializer=_init, initargs=(ruta,)
+    ctx = _contexto()
+    barrera = ctx.Barrier(args.p + 1)
+    with ctx.Pool(
+        processes=args.p, initializer=_init, initargs=(ruta, barrera)
     ) as pool:
+        barrera.wait(timeout=600)
         resultados = pool.map(_tarea, range(args.p))          # fase 1: for all ... pardo
     # seleccion secuencial O(p)  <-- se reemplaza por reduccion en arbol en la beta 3
     s_best, A_best, _, _ = max(resultados, key=lambda r: r[1])

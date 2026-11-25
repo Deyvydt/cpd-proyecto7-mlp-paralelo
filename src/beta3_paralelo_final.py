@@ -67,10 +67,20 @@ def preparar_datos(n, dir_tmp):
     return ruta, len(X_tr)
 
 
-def _init(ruta):
-    """Cada proceso lee la particion compartida desde disco (lectura concurrente, CREW)."""
+def _init(ruta, barrera=None):
+    """
+    Cada proceso lee la particion compartida desde disco (lectura concurrente, CREW).
+
+    La barrera sirve para medir el arranque: Pool() devuelve el control apenas lanza
+    los procesos, sin esperar a que esten listos, asi que sin ella el costo de arrancar
+    (con spawn, importar las librerias en cada hijo) se filtraria dentro del tiempo del
+    algoritmo. Al esperar en la barrera, el padre sabe que los p procesos ya importaron
+    todo y cargaron los datos antes de empezar a cronometrar.
+    """
     d = np.load(ruta)
     _DATOS["d"] = (d["X_tr"], d["y_tr"], d["X_te"], d["y_te"])
+    if barrera is not None:
+        barrera.wait()
 
 
 def _tarea(s):
@@ -111,8 +121,11 @@ def ejecutar(p, n):
     # aplicacion real el pool se crea una vez y se reutiliza. Ademas, la linea base
     # T_s = p * t_1 es tiempo de computo puro, asi que incluir el arranque solo en
     # T_p haria la comparacion injusta.
+    ctx = _contexto()
+    barrera = ctx.Barrier(p + 1)
     t0 = time.perf_counter()
-    pool = _contexto().Pool(processes=p, initializer=_init, initargs=(ruta,))
+    pool = ctx.Pool(processes=p, initializer=_init, initargs=(ruta, barrera))
+    barrera.wait(timeout=600)                   # espera a que los p procesos esten listos
     t_startup = time.perf_counter() - t0
 
     try:
