@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+modelos_tmp/
+mlp_model.joblib

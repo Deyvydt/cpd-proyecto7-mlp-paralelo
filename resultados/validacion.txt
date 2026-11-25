@@ -1,0 +1,8 @@
+  p       n  s* sec  s* par   acc sec   acc par  estado
+  2    3000       0       0    0.5840    0.5840  OK
+  3    3000       0       0    0.5840    0.5840  OK
+  4    5000       1       1    0.6728    0.6728  OK
+  6    5000       5       5    0.6736    0.6736  OK
+  8    5000       5       5    0.6736    0.6736  OK
+
+Resultado: todas las pruebas pasaron
