@@ -360,7 +360,7 @@ Windows, importar las librerías en cada uno) se mide por separado y no se inclu
 costo de inicialización del entorno de ejecución, no del algoritmo, y en una aplicación real el
 conjunto de procesos se crea una vez y se reutiliza. Incluirlo solo en $T_p$ haría además injusta la
 comparación, porque la línea base $T_s = p\cdot t_1$ es tiempo de cómputo puro. Ese costo se reporta
-igualmente en la Figura~2 y en la Sección 3.1.
+igualmente en la Figura~\ref{fig:desglose} y en la Tabla~\ref{tab:resultados}.
 
 \section{Resultados y análisis}
 
@@ -390,10 +390,11 @@ Hasta $p = @@P@@$ el tiempo se mantiene prácticamente plano: los procesos corre
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{fig2_desglose.png}
-\caption{Desglose en tiempo de cómputo y tiempo de comunicación/overhead.}
+\caption{Desglose en tiempo de cómputo, tiempo de comunicación y tiempo de arranque de los procesos.}
+\label{fig:desglose}
 \end{figure}
 
-El tiempo de comunicación incluye la creación de los procesos, el envío de los datos a cada uno, la recolección de resultados y la reducción. Para $n = @@NMAX@@$ y $p = 32$ fue de @@COMM32@@ s, es decir el @@PCTCOMM32@@\,\% de $T_p$: el cómputo domina ampliamente, tal como asume el modelo. La fase de reducción por sí sola es de microsegundos, coherente con su costo $O(\log p)$.
+El tiempo de comunicación incluye la creación de los procesos, el envío de los datos a cada uno, la recolección de resultados y la reducción. Para $n = @@NMAX@@$ y $p = 32$ el tiempo de comunicación fue de @@COMM32@@ s, es decir el @@PCTCOMM32@@\,\% de $T_p$: el cómputo domina ampliamente, tal como asume el modelo. La fase de reducción por sí sola es de microsegundos, coherente con su costo $O(\log p)$.
 
 \subsection{Comparación con la expresión teórica}
 
