@@ -41,27 +41,44 @@ def cargar():
     return filas
 
 
-def ajustar_modelo(filas, n_cpu):
-    """
-    Minimos cuadrados para T_p = c1*ceil(p/P)*W(n) + c2*log2(p) + c3,
-    donde W(n) = T_max * n_train * d * h (la expresion bigO del entrenamiento).
-    Devuelve (c1, c2, c3).
-    """
+def _ajuste(filas, P):
+    """Minimos cuadrados no negativos para un P dado. Devuelve (coef, error_rel_medio)."""
     A, b = [], []
     for r in filas:
         p, n = r["p"], r["n"]
-        n_train = n * 0.75
-        W = T_MAX * n_train * D_FEATURES * H_HIDDEN
-        A.append([math.ceil(p / n_cpu) * W, math.log2(p) if p > 1 else 0.0, 1.0])
+        W = T_MAX * (n * 0.75) * D_FEATURES * H_HIDDEN
+        A.append([math.ceil(p / P) * W, math.log2(p) if p > 1 else 0.0, 1.0])
         b.append(r["T_p"])
-    # minimos cuadrados con coeficientes no negativos (los tres son costos)
+    A, b = np.array(A), np.array(b)
     try:
         from scipy.optimize import nnls
-        coef, _ = nnls(np.array(A), np.array(b))
+        coef, _ = nnls(A, b)
     except Exception:
-        coef, *_ = np.linalg.lstsq(np.array(A), np.array(b), rcond=None)
+        coef, *_ = np.linalg.lstsq(A, b, rcond=None)
         coef = np.clip(coef, 0, None)
-    return coef
+    pred = A @ coef
+    err = float(np.mean(np.abs(pred - b) / b)) * 100
+    return coef, err
+
+
+def ajustar_modelo(filas, n_cpu):
+    """
+    Ajusta T_p = c1*ceil(p/P)*W(n) + c2*log2(p) + c3.
+
+    P (numero efectivo de nucleos) no se fija de antemano: se barre de 1 hasta el
+    numero de procesadores logicos y se elige el valor que minimiza el error, de modo
+    que el propio experimento revele cuantos nucleos estan rindiendo de verdad. En
+    procesadores con SMT/Hyper-Threading, el P efectivo suele coincidir con los
+    nucleos FISICOS y no con los logicos.
+    """
+    mejor = None
+    for P in range(1, max(2, n_cpu) + 1):
+        coef, err = _ajuste(filas, P)
+        if mejor is None or err < mejor[2]:
+            mejor = (coef, P, err)
+    coef, P_eff, err = mejor
+    print(f"  P efectivo estimado = {P_eff} (error {err:.1f}%)")
+    return coef, P_eff
 
 
 def t_teorico(p, n, coef, n_cpu):
@@ -87,8 +104,8 @@ def main():
     filas = cargar()
     ns = sorted({r["n"] for r in filas})
     n_cpu = int(filas[0]["n_cpu"])
-    coef = ajustar_modelo(filas, n_cpu)
-    print(f"Nucleos: {n_cpu}   coeficientes ajustados: c1={coef[0]:.3e} c2={coef[1]:.3e} c3={coef[2]:.3e}")
+    coef, P_eff = ajustar_modelo(filas, n_cpu)
+    print(f"Procesadores logicos: {n_cpu}   coeficientes ajustados: c1={coef[0]:.3e} c2={coef[1]:.3e} c3={coef[2]:.3e}")
 
     # --- Fig 1: tiempos de ejecucion ---
     fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -121,7 +138,7 @@ def main():
         x, y = serie(filas, n, "T_p")
         ax.plot(x, y, "o", color=COLORES[n], label=f"n = {int(n)} (exp.)")
         xt = np.linspace(1, 32, 200)
-        ax.plot(xt, [t_teorico(v, n, coef, n_cpu) for v in xt], "-", color=COLORES[n],
+        ax.plot(xt, [t_teorico(v, n, coef, P_eff) for v in xt], "-", color=COLORES[n],
                 alpha=.6, label=f"n = {int(n)} (teorico)")
     ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
@@ -134,7 +151,7 @@ def main():
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ps = sorted({r["p"] for r in filas})
     ax.plot(ps, ps, "k--", label="ideal $S = p$")
-    ax.axhline(n_cpu, color="gray", ls=":", label=f"techo por nucleos (P = {n_cpu})")
+    ax.axhline(P_eff, color="gray", ls=":", label=f"techo por nucleos efectivos (P = {P_eff})")
     for n in ns:
         x, y = serie(filas, n, "speedup")
         ax.plot(x, y, "o-", color=COLORES[n], label=f"n = {int(n)}")
@@ -187,7 +204,8 @@ def main():
     guardar(fig, "fig7_weak_scaling.png")
 
     with open("../resultados/ajuste_teorico.json", "w") as f:
-        json.dump({"c1": coef[0], "c2": coef[1], "c3": coef[2], "n_cpu": n_cpu}, f, indent=2)
+        json.dump({"c1": coef[0], "c2": coef[1], "c3": coef[2],
+                   "n_cpu": n_cpu, "P_eff": P_eff}, f, indent=2)
 
 
 if __name__ == "__main__":

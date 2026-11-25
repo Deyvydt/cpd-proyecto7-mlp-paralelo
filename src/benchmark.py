@@ -86,6 +86,11 @@ def main():
             print(f"  p={p:2d}  T_s={T_s:7.2f}  T_p={r['T_p']:7.2f}  "
                   f"S={S:5.2f}  E={E:5.2f}  acc={r['accuracy']:.4f}")
 
+    import json, platform
+    with open(os.path.join(os.path.dirname(args.out), "entorno.json"), "w") as f:
+        json.dump({"cpu": platform.processor(), "sistema": platform.platform(),
+                   "python": platform.python_version(), "n_cpu_logicos": n_cpu}, f, indent=2)
+
     with open(args.out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(filas[0].keys()))
         w.writeheader()

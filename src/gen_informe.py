@@ -49,7 +49,21 @@ def tabla_weak(filas):
 def main():
     filas = cargar()
     coef = json.load(open(AJUSTE))
-    P = int(coef["n_cpu"])
+    P = int(coef.get("P_eff", coef["n_cpu"]))
+    N_LOG = int(coef["n_cpu"])
+    try:
+        ent = json.load(open("../resultados/entorno.json"))
+    except Exception:
+        ent = {}
+    cpu_txt = ent.get("cpu", "")
+    sis_txt = ent.get("sistema", "")
+    hw = ("Las mediciones se tomaron en un equipo con %d procesadores lógicos"
+          % N_LOG)
+    if cpu_txt:
+        hw += " (\\texttt{%s})" % cpu_txt.replace("_", "\\_")
+    if sis_txt:
+        hw += ", sobre %s" % sis_txt.replace("_", "\\_")
+    hw += "."
     ns = sorted({r["n"] for r in filas})
     n_max = int(max(ns))
 
@@ -285,7 +299,7 @@ El desarrollo quedó registrado en tres versiones:
 \paragraph{Conteo de FLOPs.} Para la región paralelizable (el entrenamiento) contamos, por muestra y época, $2hd + 2hc$ operaciones en el \emph{forward} y $4hd+4hc$ en el \emph{backward} (gradientes y actualización de pesos), es decir
 \[ \text{FLOPs} = T_{max}\cdot n_{train}\cdot 6h(d+c). \]
 
-\paragraph{Configuración experimental.} $d = @@D@@$ \emph{features}, $c = @@C@@$ clases, $h = @@H@@$ neuronas ocultas, $T_{max} = @@TMAX@@$ épocas, $\alpha = @@ALPHA@@$, $\eta = @@ETA@@$; datos sintéticos generados con \texttt{make\_classification} y divididos 75/25 en entrenamiento y prueba. Las mediciones se tomaron en una máquina con $P = @@P@@$ núcleos físicos disponibles, y cada punto es la mediana de varias repeticiones. Como línea base se usa $T_s(p,n) = p\cdot t_1(n)$, donde $t_1(n)$ es el tiempo mediano medido de entrenar un único modelo.
+\paragraph{Configuración experimental.} $d = @@D@@$ \emph{features}, $c = @@C@@$ clases, $h = @@H@@$ neuronas ocultas, $T_{max} = @@TMAX@@$ épocas, $\alpha = @@ALPHA@@$, $\eta = @@ETA@@$; datos sintéticos generados con \texttt{make\_classification} y divididos 75/25 en entrenamiento y prueba. @@HW@@ Cada punto es la mediana de varias repeticiones. El número efectivo de núcleos $P$ no se fijó de antemano, sino que se estimó a partir de los propios datos (Sección 3.2). Como línea base se usa $T_s(p,n) = p\cdot t_1(n)$, donde $t_1(n)$ es el tiempo mediano medido de entrenar un único modelo.
 
 \section{Resultados y análisis}
 
@@ -330,7 +344,7 @@ donde el primer término es el entrenamiento, el segundo la reducción y el terc
 \[
 c_1 = @@C1@@ \ \text{s/FLOP-eq},\qquad c_2 = @@C2@@ \ \text{s},\qquad c_3 = @@C3@@ \ \text{s},
 \]
-con un error relativo medio de @@ERR@@\,\% respecto a los datos experimentales. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. Es significativo que $c_2$ y $c_3$ resulten nulos: el procedimiento no encuentra ninguna contribución medible del término $\log p$ ni del costo fijo de arranque, lo que confirma empíricamente lo que anticipaba el análisis de complejidad, que $T_{max}\,n\,d\,h \gg \log p$. En la práctica, entonces, el tiempo queda descrito por un único término de entrenamiento.
+con un error relativo medio de @@ERR@@\,\% respecto a los datos experimentales. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. Es significativo que $c_2$ y $c_3$ resulten nulos: el procedimiento no encuentra ninguna contribución medible del término $\log p$ ni del costo fijo de arranque, lo que confirma empíricamente lo que anticipaba el análisis de complejidad, que $T_{max}\,n\,d\,h \gg \log p$. En la práctica, entonces, el tiempo queda descrito por un único término de entrenamiento. El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = @@P@@$ frente a @@NLOG@@ procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. El valor estimado coincide con el número de núcleos físicos del procesador.
 
 \begin{figure}[H]
 \centering
@@ -404,6 +418,7 @@ $p$ & \texttt{n\_samples} & $T_p$ [s] & $S_p$ & $E_p$ \\
 \item \textbf{Paralelismo de modelo.} Repartir las filas de $W_1$ (las $h$ neuronas) entre procesos, útil cuando $h$ es grande.
 \item \textbf{Versión distribuida con MPI.} La implementación actual es de memoria compartida. Con \texttt{mpi4py}, la lectura concurrente del PRAM se convierte en un \texttt{comm.bcast} de los datos y la reducción en un \texttt{comm.reduce} con \texttt{MPI.MAXLOC}, que internamente también usa un árbol de $O(\log p)$ pasos. Esto permitiría usar varios nodos y superar el límite de núcleos de una sola máquina.
 \item \textbf{Reducir el costo de comunicación inicial} usando memoria compartida real (\texttt{multiprocessing.shared\_memory}) en lugar de copiar el conjunto de entrenamiento a cada proceso, lo que acercaría aún más la implementación al modelo CREW.
+\item \textbf{Ejecución en GPU.} El entrenamiento de un MLP son multiplicaciones de matrices densas, que es justamente el patrón que mejor aprovecha una GPU. Reescribiendo el modelo con PyTorch o CUDA (como se vio en la unidad de CUDA del curso) cada entrenamiento se aceleraría por sí solo, y el techo dejaría de ser el número de núcleos de CPU. La implementación actual no lo usa porque \texttt{MLPClassifier} de scikit-learn corre únicamente en CPU.
 \item \textbf{Balanceo dinámico} si en el futuro los modelos tuvieran costos distintos (por ejemplo, arquitecturas o números de épocas diferentes por semilla), mediante un \emph{work pool} en lugar del reparto estático actual.
 \end{enumerate}
 
@@ -443,6 +458,7 @@ El código completo, los resultados crudos y los scripts que generan las figuras
         "NMAX": n_max, "COMM32": "%.2f" % comm32, "PCTCOMM32": "%.1f" % pct_comm32,
         "C1": "%.3e" % coef["c1"], "C2": "%.3e" % coef["c2"], "C3": "%.3e" % coef["c3"],
         "ERR": "%.1f" % err, "SMAX": "%.2f" % s_max, "GFLOPS": "%.2f" % gflops_max,
+        "NLOG": N_LOG, "HW": hw,
     }
     for k, v in vals.items():
         tex = tex.replace("@@%s@@" % k, str(v))
