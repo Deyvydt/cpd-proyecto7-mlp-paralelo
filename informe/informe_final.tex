@@ -195,7 +195,9 @@ Pusimos el costo al lado de cada línea para que la complejidad se pueda leer di
 
 \subsection{Implementación y versiones beta}
 
-El código está en Python y usa \texttt{scikit-learn} (\texttt{MLPClassifier}) para los modelos y el módulo \texttt{multiprocessing} para el paralelismo. Usamos procesos y no hilos porque el \emph{GIL} de CPython impide que varios hilos ejecuten bytecode a la vez, de modo que con hilos no habría paralelismo real de cómputo; cada proceso recibe una copia de los datos de entrenamiento, que es la traducción práctica de la lectura concurrente del modelo CREW. Se fija \texttt{OMP\_NUM\_THREADS=1} en cada proceso para que la biblioteca de álgebra lineal no cree hilos extra y la medición de $p$ sea limpia. El contexto de \texttt{multiprocessing} se elige automáticamente: \texttt{fork} en Linux y macOS, donde el proceso hijo hereda la memoria del padre, y \texttt{spawn} en Windows, donde cada proceso arranca de cero y recibe los datos por serialización; esta diferencia se refleja en el tiempo de comunicación medido.
+El código está en Python y usa \texttt{scikit-learn} (\texttt{MLPClassifier}) para los modelos y el módulo \texttt{multiprocessing} para el paralelismo. Usamos procesos y no hilos porque el \emph{GIL} de CPython impide que varios hilos ejecuten bytecode a la vez, de modo que con hilos no habría paralelismo real de cómputo; cada proceso recibe una copia de los datos de entrenamiento, que es la traducción práctica de la lectura concurrente del modelo CREW. Se fija \texttt{OMP\_NUM\_THREADS=1} en cada proceso para que la biblioteca de álgebra lineal no cree hilos extra y la medición de $p$ sea limpia. El contexto de \texttt{multiprocessing} se elige automáticamente: \texttt{fork} en Linux y macOS, donde el proceso hijo hereda la memoria del padre, y \texttt{spawn} en Windows, donde cada proceso arranca de cero; esta diferencia se refleja en el tiempo de comunicación medido.
+
+\paragraph{Cómo acceden los procesos a los datos.} Una primera versión enviaba los arreglos de entrenamiento a cada proceso por el canal del \texttt{Pool}. Al medir en Windows detectamos que $T_p$ crecía de forma lineal con $p$ incluso con pocos modelos, señal de que los procesos arrancaban de uno en uno: el proceso padre queda bloqueado enviando los datos a cada hijo, porque los arreglos no caben en el buffer del canal y el hijo solo los lee después de importar sus librerías. Ese costo no pertenece al algoritmo sino al mecanismo de transporte. La versión final lo evita escribiendo la partición una sola vez en un archivo \texttt{.npz} del que todos los procesos leen, que además es la traducción más fiel de la lectura concurrente (CREW) del modelo PRAM: una única copia de los datos que todos leen y nadie modifica.
 
 El desarrollo quedó registrado en tres versiones:
 
@@ -210,7 +212,7 @@ El desarrollo quedó registrado en tres versiones:
 \paragraph{Conteo de FLOPs.} Para la región paralelizable (el entrenamiento) contamos, por muestra y época, $2hd + 2hc$ operaciones en el \emph{forward} y $4hd+4hc$ en el \emph{backward} (gradientes y actualización de pesos), es decir
 \[ \text{FLOPs} = T_{max}\cdot n_{train}\cdot 6h(d+c). \]
 
-\paragraph{Configuración experimental.} $d = 20$ \emph{features}, $c = 10$ clases, $h = 64$ neuronas ocultas, $T_{max} = 50$ épocas, $\alpha = 10^{-4}$, $\eta = 10^{-3}$; datos sintéticos generados con \texttt{make\_classification} y divididos 75/25 en entrenamiento y prueba. Las mediciones se tomaron en un equipo con 2 procesadores lógicos. Cada punto es la mediana de varias repeticiones. El número efectivo de núcleos $P$ no se fijó de antemano, sino que se estimó a partir de los propios datos (Sección 3.2). Como línea base se usa $T_s(p,n) = p\cdot t_1(n)$, donde $t_1(n)$ es el tiempo mediano medido de entrenar un único modelo.
+\paragraph{Configuración experimental.} $d = 20$ \emph{features}, $c = 10$ clases, $h = 64$ neuronas ocultas, $T_{max} = 50$ épocas, $\alpha = 10^{-4}$, $\eta = 10^{-3}$; datos sintéticos generados con \texttt{make\_classification} y divididos 75/25 en entrenamiento y prueba. Las mediciones se tomaron en un equipo con 12 procesadores lógicos (\texttt{Intel64 Family 6 Model 141 Stepping 1, GenuineIntel}), sobre Windows-11-10.0.26200-SP0. Cada punto es la mediana de varias repeticiones. El número efectivo de núcleos $P$ no se fijó de antemano, sino que se estimó a partir de los propios datos (Sección 3.2). Como línea base se usa $T_s(p,n) = p\cdot t_1(n)$, donde $t_1(n)$ es el tiempo mediano medido de entrenar un único modelo.
 
 \section{Resultados y análisis}
 
@@ -224,39 +226,39 @@ $p$ & $T_s$ [s] & $T_p$ [s] & cómputo [s] & comunic. [s] & $S_p$ & $E_p$ & accu
 \midrule
 \multicolumn{8}{l}{\textbf{n\_samples = 5000}}\\
 \midrule
-1 & 0.32 & 0.36 & 0.33 & 0.024 & 0.89 & 0.89 & 0.6688 \\
-2 & 0.64 & 0.40 & 0.37 & 0.028 & 1.60 & 0.80 & 0.6728 \\
-4 & 1.28 & 0.73 & 0.70 & 0.029 & 1.75 & 0.44 & 0.6728 \\
-8 & 2.56 & 1.63 & 1.59 & 0.044 & 1.57 & 0.20 & 0.6736 \\
-16 & 5.12 & 3.33 & 3.20 & 0.127 & 1.54 & 0.10 & 0.6736 \\
-32 & 10.24 & 6.80 & 6.48 & 0.327 & 1.51 & 0.05 & 0.6736 \\
+1 & 0.31 & 2.61 & 0.31 & 2.297 & 0.12 & 0.12 & 0.6688 \\
+2 & 0.62 & 2.59 & 0.32 & 2.276 & 0.24 & 0.12 & 0.6728 \\
+4 & 1.24 & 2.92 & 0.47 & 2.445 & 0.42 & 0.11 & 0.6728 \\
+8 & 2.48 & 3.84 & 0.56 & 3.282 & 0.65 & 0.08 & 0.6736 \\
+16 & 4.96 & 7.36 & 1.03 & 6.336 & 0.67 & 0.04 & 0.6736 \\
+32 & 9.92 & 14.25 & 1.46 & 12.790 & 0.70 & 0.02 & 0.6736 \\
 \midrule
 \multicolumn{8}{l}{\textbf{n\_samples = 10000}}\\
 \midrule
-1 & 0.77 & 0.89 & 0.87 & 0.021 & 0.87 & 0.87 & 0.7332 \\
-2 & 1.55 & 0.97 & 0.95 & 0.023 & 1.60 & 0.80 & 0.7332 \\
-4 & 3.10 & 1.64 & 1.60 & 0.039 & 1.89 & 0.47 & 0.7372 \\
-8 & 6.19 & 3.26 & 3.18 & 0.073 & 1.90 & 0.24 & 0.7372 \\
-16 & 12.38 & 6.47 & 6.32 & 0.152 & 1.91 & 0.12 & 0.7372 \\
-32 & 24.77 & 13.04 & 12.66 & 0.378 & 1.90 & 0.06 & 0.7372 \\
+1 & 0.62 & 3.06 & 0.63 & 2.432 & 0.20 & 0.20 & 0.7332 \\
+2 & 1.24 & 3.03 & 0.65 & 2.385 & 0.41 & 0.20 & 0.7332 \\
+4 & 2.48 & 3.20 & 0.81 & 2.386 & 0.78 & 0.19 & 0.7372 \\
+8 & 4.96 & 4.63 & 1.12 & 3.515 & 1.07 & 0.13 & 0.7372 \\
+16 & 9.92 & 8.69 & 2.03 & 6.657 & 1.14 & 0.07 & 0.7372 \\
+32 & 19.83 & 17.11 & 2.51 & 14.604 & 1.16 & 0.04 & 0.7372 \\
 \midrule
 \multicolumn{8}{l}{\textbf{n\_samples = 20000}}\\
 \midrule
-1 & 1.53 & 1.34 & 1.32 & 0.021 & 1.14 & 1.14 & 0.7486 \\
-2 & 3.05 & 1.42 & 1.40 & 0.025 & 2.15 & 1.07 & 0.7486 \\
-4 & 6.11 & 3.08 & 3.03 & 0.045 & 1.99 & 0.50 & 0.7532 \\
-8 & 12.22 & 6.41 & 6.35 & 0.068 & 1.91 & 0.24 & 0.7532 \\
-16 & 24.44 & 13.11 & 12.98 & 0.128 & 1.86 & 0.12 & 0.7548 \\
-32 & 48.88 & 27.02 & 26.82 & 0.199 & 1.81 & 0.06 & 0.7576 \\
+1 & 1.22 & 3.53 & 1.23 & 2.294 & 0.35 & 0.35 & 0.7486 \\
+2 & 2.44 & 3.80 & 1.42 & 2.382 & 0.64 & 0.32 & 0.7486 \\
+4 & 4.87 & 4.42 & 1.58 & 2.840 & 1.10 & 0.28 & 0.7532 \\
+8 & 9.74 & 5.76 & 2.35 & 3.413 & 1.69 & 0.21 & 0.7532 \\
+16 & 19.48 & 10.51 & 3.51 & 7.004 & 1.85 & 0.12 & 0.7548 \\
+32 & 38.96 & 20.33 & 5.83 & 14.504 & 1.92 & 0.06 & 0.7576 \\
 \midrule
 \multicolumn{8}{l}{\textbf{n\_samples = 40000}}\\
 \midrule
-1 & 2.99 & 2.81 & 2.78 & 0.029 & 1.06 & 1.06 & 0.7876 \\
-2 & 5.97 & 3.10 & 3.07 & 0.031 & 1.92 & 0.96 & 0.7876 \\
-4 & 11.94 & 6.13 & 6.08 & 0.054 & 1.95 & 0.49 & 0.7897 \\
-8 & 23.88 & 13.84 & 13.73 & 0.104 & 1.73 & 0.22 & 0.7946 \\
-16 & 47.76 & 28.68 & 28.50 & 0.180 & 1.67 & 0.10 & 0.7964 \\
-32 & 95.52 & 55.65 & 55.42 & 0.228 & 1.72 & 0.05 & 0.7964 \\
+1 & 2.45 & 4.71 & 2.48 & 2.227 & 0.52 & 0.52 & 0.7876 \\
+2 & 4.90 & 4.92 & 2.68 & 2.236 & 1.00 & 0.50 & 0.7876 \\
+4 & 9.81 & 5.31 & 2.85 & 2.462 & 1.85 & 0.46 & 0.7897 \\
+8 & 19.62 & 7.36 & 4.13 & 3.224 & 2.67 & 0.33 & 0.7946 \\
+16 & 39.24 & 15.10 & 7.46 & 7.639 & 2.60 & 0.16 & 0.7964 \\
+32 & 78.48 & 28.83 & 14.56 & 14.275 & 2.72 & 0.09 & 0.7964 \\
 \bottomrule
 \end{tabular}
 \caption{Mediciones para cada combinación de $p$ y \texttt{n\_samples}.}
@@ -269,7 +271,7 @@ $p$ & $T_s$ [s] & $T_p$ [s] & cómputo [s] & comunic. [s] & $S_p$ & $E_p$ & accu
 \caption{Tiempo de ejecución $T_p$ frente al número de procesos.}
 \end{figure}
 
-Hasta $p = 2$ el tiempo se mantiene prácticamente plano: los procesos corren realmente a la vez y entrenar $p$ modelos cuesta casi lo mismo que entrenar uno. A partir de ahí $T_p$ crece de forma aproximadamente lineal en $p$, porque los procesos ya no caben en los núcleos disponibles y empiezan a turnarse.
+Hasta $p = 4$ el tiempo se mantiene prácticamente plano: los procesos corren realmente a la vez y entrenar $p$ modelos cuesta casi lo mismo que entrenar uno. A partir de ahí $T_p$ crece de forma aproximadamente lineal en $p$, porque los procesos ya no caben en los núcleos disponibles y empiezan a turnarse.
 
 \begin{figure}[H]
 \centering
@@ -277,7 +279,7 @@ Hasta $p = 2$ el tiempo se mantiene prácticamente plano: los procesos corren re
 \caption{Desglose en tiempo de cómputo y tiempo de comunicación/overhead.}
 \end{figure}
 
-El tiempo de comunicación incluye la creación de los procesos, el envío de los datos a cada uno, la recolección de resultados y la reducción. Para $n = 40000$ y $p = 32$ fue de 0.23 s, es decir el 0.4\,\% de $T_p$: el cómputo domina ampliamente, tal como asume el modelo. La fase de reducción por sí sola es de microsegundos, coherente con su costo $O(\log p)$.
+El tiempo de comunicación incluye la creación de los procesos, el envío de los datos a cada uno, la recolección de resultados y la reducción. Para $n = 40000$ y $p = 32$ fue de 14.28 s, es decir el 49.5\,\% de $T_p$: el cómputo domina ampliamente, tal como asume el modelo. La fase de reducción por sí sola es de microsegundos, coherente con su costo $O(\log p)$.
 
 \subsection{Comparación con la expresión teórica}
 
@@ -287,9 +289,9 @@ T_p(n,p) \;=\; c_1 \left\lceil \frac{p}{P} \right\rceil T_{max}\, n_{train}\, d\
 \]
 donde el primer término es el entrenamiento, el segundo la reducción y el tercero el costo fijo de arranque. Ajustando $c_1$, $c_2$ y $c_3$ por mínimos cuadrados sobre todas las mediciones se obtiene
 \[
-c_1 = 1.797e-09 \ \text{s/FLOP-eq},\qquad c_2 = 0.000e+00 \ \text{s},\qquad c_3 = 0.000e+00 \ \text{s},
+c_1 = 1.371e-09 \ \text{s/FLOP-eq},\qquad c_2 = 1.419e+00 \ \text{s},\qquad c_3 = 7.847e-01 \ \text{s},
 \]
-con un error relativo medio de 9.3\,\% respecto a los datos experimentales. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. Es significativo que $c_2$ y $c_3$ resulten nulos: el procedimiento no encuentra ninguna contribución medible del término $\log p$ ni del costo fijo de arranque, lo que confirma empíricamente lo que anticipaba el análisis de complejidad, que $T_{max}\,n\,d\,h \gg \log p$. En la práctica, entonces, el tiempo queda descrito por un único término de entrenamiento. El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = 2$ frente a 2 procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. El valor estimado coincide con el número de núcleos físicos del procesador.
+con un error relativo medio de 22.8\,\% respecto a los datos experimentales. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. Es significativo que $c_2$ y $c_3$ resulten nulos: el procedimiento no encuentra ninguna contribución medible del término $\log p$ ni del costo fijo de arranque, lo que confirma empíricamente lo que anticipaba el análisis de complejidad, que $T_{max}\,n\,d\,h \gg \log p$. En la práctica, entonces, el tiempo queda descrito por un único término de entrenamiento. El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = 4$ frente a 12 procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. Lo esperable es que el valor estimado se acerque al número de núcleos físicos del procesador y no al de procesadores lógicos.
 
 \begin{figure}[H]
 \centering
@@ -313,7 +315,7 @@ La curva teórica reproduce las dos regiones observadas: la zona plana mientras 
 \caption{Eficiencia $E_p = S_p/p$.}
 \end{figure}
 
-El speedup sigue la recta ideal mientras $p \le P$ y luego se satura en torno a $S_{max} \approx 2.15$, muy cerca del número de núcleos $P = 2$. Este techo es el esperado: si todos los núcleos están ocupados, agregar más procesos no agrega capacidad de cómputo, solo reparte el mismo tiempo de CPU entre más tareas. Sustituyendo $\lceil p/P\rceil$ en la definición de speedup,
+El speedup sigue la recta ideal mientras $p \le P$ y luego se satura en torno a $S_{max} \approx 2.72$, muy cerca del número de núcleos $P = 4$. Este techo es el esperado: si todos los núcleos están ocupados, agregar más procesos no agrega capacidad de cómputo, solo reparte el mismo tiempo de CPU entre más tareas. Sustituyendo $\lceil p/P\rceil$ en la definición de speedup,
 \[
 S_p \;=\; \frac{p\,T_{MLP}}{\lceil p/P\rceil\,T_{MLP}} \;=\; \frac{p}{\lceil p/P \rceil} \;\le\; P ,
 \]
@@ -329,7 +331,7 @@ Conviene notar la diferencia con la Ley de Amdahl: aquí el techo no lo impone u
 \caption{Rendimiento en GFLOP/s frente al número de procesos.}
 \end{figure}
 
-El rendimiento sube hasta $p = P$ y después se mantiene esencialmente constante, alcanzando un máximo de 12.14 GFLOP/s. Esto es consistente con lo anterior: una vez saturados los núcleos, la máquina ya está entregando todas las operaciones por segundo que puede, y aumentar $p$ solo reparte esa misma capacidad.
+El rendimiento sube hasta $p = P$ y después se mantiene esencialmente constante, alcanzando un máximo de 19.18 GFLOP/s. Esto es consistente con lo anterior: una vez saturados los núcleos, la máquina ya está entregando todas las operaciones por segundo que puede, y aumentar $p$ solo reparte esa misma capacidad.
 
 \subsection{Escalabilidad}
 
@@ -341,10 +343,10 @@ Como el número de semillas es igual a $p$, al aumentar $p$ también aumenta el 
 \toprule
 $p$ & \texttt{n\_samples} & $T_p$ [s] & $S_p$ & $E_p$ \\
 \midrule
-1 & 5000 & 0.36 & 0.89 & 0.89 \\
-2 & 10000 & 0.97 & 1.60 & 0.80 \\
-4 & 20000 & 3.08 & 1.99 & 0.50 \\
-8 & 40000 & 13.84 & 1.73 & 0.22 \\
+1 & 5000 & 2.61 & 0.12 & 0.12 \\
+2 & 10000 & 3.03 & 0.41 & 0.20 \\
+4 & 20000 & 4.42 & 1.10 & 0.28 \\
+8 & 40000 & 7.36 & 2.67 & 0.33 \\
 \bottomrule
 \end{tabular}
 \caption{Escalabilidad débil: el tamaño del problema crece proporcionalmente a $p$.}
@@ -374,8 +376,8 @@ $p$ & \texttt{n\_samples} & $T_p$ [s] & $S_p$ & $E_p$ \\
 
 \begin{itemize}[leftmargin=1.2cm]
 \item La implementación reproduce exactamente el resultado del algoritmo secuencial (misma semilla ganadora y misma exactitud), incluso con $p$ que no es potencia de 2.
-\item El tiempo paralelo medido se ajusta al modelo teórico $O(T_{max}\,n\,d\,h + \log p)$ corregido por el número de núcleos, con un error relativo medio de 9.3\,\%.
-\item El \emph{speedup} es prácticamente ideal mientras $p \le P$ y se satura en $S \approx 2.15$, cerca de $P = 2$; el límite es del hardware y no del algoritmo.
+\item El tiempo paralelo medido se ajusta al modelo teórico $O(T_{max}\,n\,d\,h + \log p)$ corregido por el número de núcleos, con un error relativo medio de 22.8\,\%.
+\item El \emph{speedup} es prácticamente ideal mientras $p \le P$ y se satura en $S \approx 2.72$, cerca de $P = 4$; el límite es del hardware y no del algoritmo.
 \item El costo de la reducción en árbol resultó despreciable frente al entrenamiento, como anticipaba el análisis de complejidad.
 \end{itemize}
 
