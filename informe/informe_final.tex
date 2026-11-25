@@ -296,7 +296,7 @@ donde el primer término es el entrenamiento, el segundo la reducción y el terc
 \[
 c_1 = 1.311e-09 \ \text{s/FLOP-eq},\qquad c_2 = 2.882e-02 \ \text{s},\qquad c_3 = 0.000e+00 \ \text{s},
 \]
-con un error relativo medio de 7.5\,\% respecto a los datos experimentales. Un error de ese orden indica que el modelo de tres términos describe bien el comportamiento medido en todo el rango de $p$ y $n$. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. El término dominante es $c_1$, el del entrenamiento. Los otros dos absorben lo que el modelo PRAM no describe: $c_2 = 0.03$ s recoge el costo que crece con $\log p$ (la reducción y la coordinación de más procesos) y $c_3 = 0.00$ s un costo fijo por corrida, independiente de $p$ y de $n$. Que ambos sean pequeños frente al término de entrenamiento en las configuraciones grandes es coherente con la predicción teórica $T_{max}\,n\,d\,h \gg \log p$; en las configuraciones pequeñas, en cambio, llegan a dominar. El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = 6$ frente a 12 procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. Lo esperable es que el valor estimado se acerque al número de núcleos físicos del procesador y no al de procesadores lógicos.
+con un error relativo medio de 7.5\,\% respecto a los datos experimentales. Un error de ese orden indica que el modelo de tres términos describe bien el comportamiento medido en todo el rango de $p$ y $n$. El ajuste se hizo con coeficientes no negativos, ya que los tres representan costos. El término dominante es $c_1$, el del entrenamiento. Los otros dos absorben lo que el modelo PRAM no describe: $c_2 = 0.03$ s recoge el costo que crece con $\log p$ (la reducción y la coordinación de más procesos) y $c_3 = 0.00$ s un costo fijo por corrida, independiente de $p$ y de $n$. Ambos resultan muy pequeños frente al término de entrenamiento, lo que confirma empíricamente la predicción teórica $T_{max}\,n\,d\,h \gg \log p$: el costo de la reducción existe y es medible, pero es marginal frente al entrenamiento. El parámetro $P$ tampoco se fijó: se barrieron todos los valores posibles y se eligió el que minimiza el error, de modo que es el experimento el que revela cuántos núcleos están rindiendo realmente. El ajuste da $P = 6$ frente a 12 procesadores lógicos que reporta el sistema operativo. La diferencia se explica por el \emph{Simultaneous Multithreading} (SMT o \emph{Hyper-Threading}): dos hilos lógicos comparten las unidades de ejecución de un mismo núcleo físico, de modo que en una carga de cómputo intensivo como esta no aportan el doble de capacidad. Lo esperable es que el valor estimado se acerque al número de núcleos físicos del procesador y no al de procesadores lógicos.
 
 \begin{figure}[H]
 \centering
@@ -324,7 +324,7 @@ El speedup crece con $p$ y luego se satura en torno a $S_{max} \approx 5.14$, ce
 \[
 S_p \;=\; \frac{p\,T_{MLP}}{\lceil p/P\rceil\,T_{MLP}} \;=\; \frac{p}{\lceil p/P \rceil} \;\le\; P ,
 \]
-que es precisamente la curva medida. La eficiencia se mantiene alta mientras $p\le P$ y después cae como $P/p$, por la misma razón.
+que es precisamente la curva medida. La eficiencia se mantiene alta mientras $p \le P$ y despu\'es cae aproximadamente como $P/p$, por la misma raz\'on: al repartir el mismo n\'umero de n\'ucleos entre m\'as procesos, a cada uno le toca una fracci\'on menor. Conviene notar que ya antes de llegar a $P$ la eficiencia baja un poco (entre 0.00 y 0.00 en $p = 6$), porque el sistema operativo tambi\'en ocupa n\'ucleos y los procesos compiten por la memoria cach\'e.
 
 Conviene notar la diferencia con la Ley de Amdahl: aquí el techo no lo impone una fracción secuencial del algoritmo (que es prácticamente nula), sino el hardware. En una máquina con más núcleos la misma implementación seguiría escalando, porque el algoritmo no tiene dependencias entre modelos.
 
@@ -382,7 +382,7 @@ $p$ & \texttt{n\_samples} & $T_p$ [s] & $S_p$ & $E_p$ \\
 \begin{itemize}[leftmargin=1.2cm]
 \item La implementación reproduce exactamente el resultado del algoritmo secuencial (misma semilla ganadora y misma exactitud), incluso con $p$ que no es potencia de 2.
 \item El tiempo paralelo medido se ajusta al modelo teórico $O(T_{max}\,n\,d\,h + \log p)$ corregido por el número de núcleos, con un error relativo medio de 7.5\,\%.
-\item El \emph{speedup} es prácticamente ideal mientras $p \le P$ y se satura en $S \approx 5.14$, cerca de $P = 6$; el límite es del hardware y no del algoritmo.
+\item El \emph{speedup} crece casi linealmente mientras $p \le P$ y se satura en $S \approx 5.14$, cerca de $P = 6$; el límite es del hardware y no del algoritmo.
 \item El costo de la reducción en árbol resultó despreciable frente al entrenamiento, como anticipaba el análisis de complejidad.
 \end{itemize}
 

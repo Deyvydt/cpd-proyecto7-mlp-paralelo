@@ -101,10 +101,10 @@ def main():
                    r"absorben lo que el modelo PRAM no describe: $c_2 = %.2f$ s recoge el costo que "
                    r"crece con $\log p$ (la reducción y la coordinación de más procesos) y "
                    r"$c_3 = %.2f$ s un costo fijo por corrida, independiente de $p$ y de $n$. "
-                   r"Que ambos sean pequeños frente al término de entrenamiento en las "
-                   r"configuraciones grandes es coherente con la predicción teórica "
-                   r"$T_{max}\,n\,d\,h \gg \log p$; en las configuraciones pequeñas, en cambio, "
-                   r"llegan a dominar." % (c2, c3))
+                   r"Ambos resultan muy pequeños frente al término de entrenamiento, lo que "
+                   r"confirma empíricamente la predicción teórica "
+                   r"$T_{max}\,n\,d\,h \gg \log p$: el costo de la reducción existe y es medible, "
+                   r"pero es marginal frente al entrenamiento." % (c2, c3))
 
     if s_max >= 0.8 * P:
         txt_speedup = (r"El speedup crece con $p$ y luego se satura en torno a "
@@ -121,6 +121,15 @@ def main():
                        r"de modo que el cociente se acerca a su valor ideal. Esta es exactamente la "
                        r"situación que la Ley de Amdahl describe, con la parte no paralelizable "
                        r"jugando el papel de $f$." % (s_max, P))
+
+    e_lo = min((r["eficiencia"] for r in filas if int(r["p"]) == P), default=0)
+    e_hi = max((r["eficiencia"] for r in filas if int(r["p"]) == P), default=0)
+    txt_efi = (r"La eficiencia se mantiene alta mientras $p \le P$ y despu\'es cae aproximadamente "
+               r"como $P/p$, por la misma raz\'on: al repartir el mismo n\'umero de n\'ucleos entre m\'as "
+               r"procesos, a cada uno le toca una fracci\'on menor. Conviene notar que ya antes de "
+               r"llegar a $P$ la eficiencia baja un poco (entre %.2f y %.2f en $p = %d$), porque el "
+               r"sistema operativo tambi\'en ocupa n\'ucleos y los procesos compiten por la memoria "
+               r"cach\'e." % (e_lo, e_hi, P))
 
     if err < 15:
         txt_err = (r"Un error de ese orden indica que el modelo de tres términos describe bien el "
@@ -424,7 +433,7 @@ La curva teórica reproduce las dos regiones observadas: la zona plana mientras 
 \[
 S_p \;=\; \frac{p\,T_{MLP}}{\lceil p/P\rceil\,T_{MLP}} \;=\; \frac{p}{\lceil p/P \rceil} \;\le\; P ,
 \]
-que es precisamente la curva medida. La eficiencia se mantiene alta mientras $p\le P$ y después cae como $P/p$, por la misma razón.
+que es precisamente la curva medida. @@EFI@@
 
 Conviene notar la diferencia con la Ley de Amdahl: aquí el techo no lo impone una fracción secuencial del algoritmo (que es prácticamente nula), sino el hardware. En una máquina con más núcleos la misma implementación seguiría escalando, porque el algoritmo no tiene dependencias entre modelos.
 
@@ -479,7 +488,7 @@ $p$ & \texttt{n\_samples} & $T_p$ [s] & $S_p$ & $E_p$ \\
 \begin{itemize}[leftmargin=1.2cm]
 \item La implementación reproduce exactamente el resultado del algoritmo secuencial (misma semilla ganadora y misma exactitud), incluso con $p$ que no es potencia de 2.
 \item El tiempo paralelo medido se ajusta al modelo teórico $O(T_{max}\,n\,d\,h + \log p)$ corregido por el número de núcleos, con un error relativo medio de @@ERR@@\,\%.
-\item El \emph{speedup} es prácticamente ideal mientras $p \le P$ y se satura en $S \approx @@SMAX@@$, cerca de $P = @@P@@$; el límite es del hardware y no del algoritmo.
+\item El \emph{speedup} crece casi linealmente mientras $p \le P$ y se satura en $S \approx @@SMAX@@$, cerca de $P = @@P@@$; el límite es del hardware y no del algoritmo.
 \item El costo de la reducción en árbol resultó despreciable frente al entrenamiento, como anticipaba el análisis de complejidad.
 \end{itemize}
 
@@ -511,7 +520,7 @@ El código completo, los resultados crudos y los scripts que generan las figuras
         "C1": "%.3e" % coef["c1"], "C2": "%.3e" % coef["c2"], "C3": "%.3e" % coef["c3"],
         "ERR": "%.1f" % err, "SMAX": "%.2f" % s_max, "GFLOPS": "%.2f" % gflops_max,
         "NLOG": N_LOG, "HW": hw,
-        "C23": txt_c23, "SPEEDUP": txt_speedup, "ERRCOM": txt_err,
+        "C23": txt_c23, "SPEEDUP": txt_speedup, "ERRCOM": txt_err, "EFI": txt_efi,
     }
     for k, v in vals.items():
         tex = tex.replace("@@%s@@" % k, str(v))
