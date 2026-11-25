@@ -31,6 +31,7 @@ from common import T_MAX, D_FEATURES, H_HIDDEN
 
 CSV = "../resultados/resultados.csv"
 DIR = "../figuras"
+TICKS = [1, 2, 4, 6, 8, 12, 16, 32]
 COLORES = {5000: "#1f77b4", 10000: "#2ca02c", 20000: "#ff7f0e", 40000: "#d62728"}
 
 
@@ -112,10 +113,12 @@ def main():
     for n in ns:
         x, y = serie(filas, n, "T_p")
         ax.plot(x, y, "o-", color=COLORES[n], label=f"n = {int(n)}")
-    ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
+    ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.axvline(P_eff, color="gray", ls=":", lw=1)
     ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("Tiempo de ejecucion $T_p$ [s]")
-    ax.set_title("Tiempo de ejecucion paralelo"); ax.grid(alpha=.3); ax.legend()
+    ax.set_title(f"Tiempo de ejecucion paralelo (linea punteada: P = {P_eff})")
+    ax.grid(alpha=.3); ax.legend()
     guardar(fig, "fig1_tiempos.png")
 
     # --- Fig 2: computo vs comunicacion ---
@@ -130,7 +133,7 @@ def main():
         axes[1].plot(x, ys, "^:", color=COLORES[n], alpha=.5)
     for ax, t in zip(axes, ["Tiempo de computo",
                             "Comunicacion (cuadrados) y arranque del pool (triangulos)"]):
-        ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
+        ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
         ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
         ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("Tiempo [s]")
         ax.set_title(t); ax.grid(alpha=.3); ax.legend()
@@ -144,7 +147,7 @@ def main():
         xt = np.linspace(1, 32, 200)
         ax.plot(xt, [t_teorico(v, n, coef, P_eff) for v in xt], "-", color=COLORES[n],
                 alpha=.6, label=f"n = {int(n)} (teorico)")
-    ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
+    ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("$T_p$ [s]")
     ax.set_title("Curva teorica superpuesta a la experimental")
@@ -156,10 +159,11 @@ def main():
     ps = sorted({r["p"] for r in filas})
     ax.plot(ps, ps, "k--", label="ideal $S = p$")
     ax.axhline(P_eff, color="gray", ls=":", label=f"techo por nucleos efectivos (P = {P_eff})")
+    ax.axvline(P_eff, color="gray", ls=":", lw=1)
     for n in ns:
         x, y = serie(filas, n, "speedup")
         ax.plot(x, y, "o-", color=COLORES[n], label=f"n = {int(n)}")
-    ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
+    ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("Speedup $S_p$")
     ax.set_title("Speedup"); ax.grid(alpha=.3); ax.legend(fontsize=8)
@@ -168,10 +172,11 @@ def main():
     # --- Fig 5: eficiencia ---
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.axhline(1.0, color="k", ls="--", label="ideal $E = 1$")
+    ax.axvline(P_eff, color="gray", ls=":", lw=1, label=f"P = {P_eff}")
     for n in ns:
         x, y = serie(filas, n, "eficiencia")
         ax.plot(x, y, "o-", color=COLORES[n], label=f"n = {int(n)}")
-    ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
+    ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("Eficiencia $E_p$")
     ax.set_title("Eficiencia"); ax.grid(alpha=.3); ax.legend(fontsize=8)
@@ -182,7 +187,7 @@ def main():
     for n in ns:
         x, y = serie(filas, n, "flops_por_seg")
         ax.plot(x, [v / 1e9 for v in y], "o-", color=COLORES[n], label=f"n = {int(n)}")
-    ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32])
+    ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Numero de procesos p"); ax.set_ylabel("GFLOP/s")
     ax.set_title("Rendimiento: FLOPs por segundo vs p")

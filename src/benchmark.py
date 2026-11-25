@@ -23,7 +23,10 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 from common import cargar_datos, entrenar_y_evaluar
 from beta3_paralelo_final import ejecutar
 
-LISTA_P = [1, 2, 4, 8, 16, 32]
+# El enunciado pide p = 1, 2, 4, 8, 16, 32. Agregamos p = 6 y p = 12 para poder ver
+# el codo exacto: entre 4 y 8 esta el numero de nucleos, y sin esos puntos la curva
+# salta de golpe y no se distingue donde empieza realmente la saturacion.
+LISTA_P = [1, 2, 4, 6, 8, 12, 16, 32]
 LISTA_N = [5000, 10000, 20000, 40000]
 SEMILLAS_BASE = 4      # cuantas semillas se promedian para estimar t_1(n)
 
