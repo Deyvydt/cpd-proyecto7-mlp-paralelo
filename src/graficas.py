@@ -32,6 +32,11 @@ from common import T_MAX, D_FEATURES, H_HIDDEN
 CSV = "../resultados/resultados.csv"
 DIR = "../figuras"
 TICKS = [1, 2, 4, 6, 8, 12, 16, 32]
+
+# Numero de nucleos FISICOS del procesador donde se midio. Es un dato del hardware,
+# no un parametro que se ajuste: el i5-11400H tiene 6 nucleos fisicos y 12 logicos.
+# Si se mide en otra maquina, cambiar este valor (o ponerlo en None para estimarlo).
+P_FISICOS = 6
 COLORES = {5000: "#1f77b4", 10000: "#2ca02c", 20000: "#ff7f0e", 40000: "#d62728"}
 
 
@@ -66,20 +71,17 @@ def ajustar_modelo(filas, n_cpu):
     """
     Ajusta T_p = c1*ceil(p/P)*W(n) + c2*log2(p) + c3.
 
-    P (numero efectivo de nucleos) no se fija de antemano: se barre de 1 hasta el
-    numero de procesadores logicos y se elige el valor que minimiza el error, de modo
-    que el propio experimento revele cuantos nucleos estan rindiendo de verdad. En
-    procesadores con SMT/Hyper-Threading, el P efectivo suele coincidir con los
-    nucleos FISICOS y no con los logicos.
+    P es el numero de nucleos FISICOS de la maquina (P_FISICOS), que es un dato del
+    hardware y no un parametro libre. Para contrastar, se reporta tambien que valor de P
+    minimizaria el error si se dejara libre.
     """
-    mejor = None
-    for P in range(1, max(2, n_cpu) + 1):
-        coef, err = _ajuste(filas, P)
-        if mejor is None or err < mejor[2]:
-            mejor = (coef, P, err)
-    coef, P_eff, err = mejor
-    print(f"  P efectivo estimado = {P_eff} (error {err:.1f}%)")
-    return coef, P_eff
+    errores = {Pv: _ajuste(filas, Pv)[1] for Pv in range(1, max(2, n_cpu) + 1)}
+    P_libre = min(errores, key=errores.get)
+    P = P_FISICOS if P_FISICOS else P_libre
+    coef, err = _ajuste(filas, P)
+    print(f"  P = {P} (nucleos fisicos), error {err:.1f}%"
+          f"   [P libre que minimizaria el error: {P_libre}, {errores[P_libre]:.1f}%]")
+    return coef, P
 
 
 def t_teorico(p, n, coef, n_cpu):
