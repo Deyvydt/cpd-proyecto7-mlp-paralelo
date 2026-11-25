@@ -18,6 +18,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 
 import multiprocessing as mp
+import numpy as np
 from common import cargar_datos, entrenar_y_evaluar
 
 _DATOS = {}
@@ -41,9 +42,27 @@ def _contexto():
 
 
 
-def _init(X_tr, y_tr, X_te, y_te):
-    """Cada proceso recibe una copia de los datos (lectura concurrente, CREW)."""
-    _DATOS["d"] = (X_tr, y_tr, X_te, y_te)
+def preparar_datos(n, dir_tmp):
+    """
+    El proceso padre genera la particion UNA sola vez y la deja en un archivo .npz,
+    que hace las veces de la memoria compartida del modelo PRAM: todos los procesos
+    leen de ahi (lectura concurrente, CREW) y ninguno la modifica.
+
+    No se envian los arrays por el canal del Pool porque en Windows ese envio bloquea
+    al padre hasta que cada hijo termina de leer, lo que serializa el arranque y
+    contamina la medicion con un costo que no pertenece al algoritmo.
+    """
+    os.makedirs(dir_tmp, exist_ok=True)
+    ruta = os.path.join(dir_tmp, f"datos_{n}.npz")
+    X_tr, X_te, y_tr, y_te = cargar_datos(n)
+    np.savez(ruta, X_tr=X_tr, X_te=X_te, y_tr=y_tr, y_te=y_te)
+    return ruta, len(X_tr)
+
+
+def _init(ruta):
+    """Cada proceso lee la particion compartida desde disco (CREW)."""
+    d = np.load(ruta)
+    _DATOS["d"] = (d["X_tr"], d["y_tr"], d["X_te"], d["y_te"])
 
 
 def _tarea(semilla):
@@ -58,11 +77,11 @@ def main():
     ap.add_argument("--n", type=int, default=5000)
     args = ap.parse_args()
 
-    X_tr, X_te, y_tr, y_te = cargar_datos(args.n)
+    ruta, _ = preparar_datos(args.n, "modelos_tmp")
 
     t0 = time.perf_counter()
     with _contexto().Pool(
-        processes=args.p, initializer=_init, initargs=(X_tr, y_tr, X_te, y_te)
+        processes=args.p, initializer=_init, initargs=(ruta,)
     ) as pool:
         resultados = pool.map(_tarea, range(args.p))          # fase 1: for all ... pardo
     # seleccion secuencial O(p)  <-- se reemplaza por reduccion en arbol en la beta 3
