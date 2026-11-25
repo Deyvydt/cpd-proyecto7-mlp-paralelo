@@ -53,7 +53,7 @@ def _ajuste(filas, P):
     for r in filas:
         p, n = r["p"], r["n"]
         W = T_MAX * (n * 0.75) * D_FEATURES * H_HIDDEN
-        A.append([math.ceil(p / P) * W, math.log2(p) if p > 1 else 0.0, 1.0])
+        A.append([max(1.0, p / P) * W, math.log2(p) if p > 1 else 0.0, 1.0])
         b.append(r["T_p"])
     A, b = np.array(A), np.array(b)
     try:
@@ -87,7 +87,7 @@ def ajustar_modelo(filas, n_cpu):
 def t_teorico(p, n, coef, n_cpu):
     n_train = n * 0.75
     W = T_MAX * n_train * D_FEATURES * H_HIDDEN
-    return coef[0] * math.ceil(p / n_cpu) * W + coef[1] * (math.log2(p) if p > 1 else 0) + coef[2]
+    return coef[0] * max(1.0, p / n_cpu) * W + coef[1] * (math.log2(p) if p > 1 else 0) + coef[2]
 
 
 def serie(filas, n, campo):
@@ -146,7 +146,7 @@ def main():
     for n in ns:
         x, y = serie(filas, n, "T_p")
         ax.plot(x, y, "o", color=COLORES[n], label=f"n = {int(n)} (exp.)")
-        xt = np.linspace(1, 32, 200)
+        xt = np.logspace(0, 5, 400, base=2)
         ax.plot(xt, [t_teorico(v, n, coef, P_eff) for v in xt], "-", color=COLORES[n],
                 alpha=.6, label=f"n = {int(n)} (teorico)")
     ax.set_xscale("log", base=2); ax.set_xticks(TICKS)
@@ -160,6 +160,9 @@ def main():
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ps = sorted({r["p"] for r in filas})
     ax.plot(ps, ps, "k--", label="ideal $S = p$")
+    xt = np.logspace(0, 5, 400, base=2)
+    ax.plot(xt, [v / max(1.0, v / P_eff) for v in xt], color="gray", lw=1.2,
+            label=f"teorico $S = p/\\max(1,p/P)$, P = {P_eff}")
     ax.axhline(P_eff, color="gray", ls=":", label=f"techo por nucleos efectivos (P = {P_eff})")
     ax.axvline(P_eff, color="gray", ls=":", lw=1)
     for n in ns:
@@ -174,7 +177,9 @@ def main():
     # --- Fig 5: eficiencia ---
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.axhline(1.0, color="k", ls="--", label="ideal $E = 1$")
-    ax.axvline(P_eff, color="gray", ls=":", lw=1, label=f"P = {P_eff}")
+    xt = np.logspace(0, 5, 400, base=2)
+    ax.plot(xt, [1.0 / max(1.0, v / P_eff) for v in xt], color="gray", lw=1.2,
+            label=f"teorico $E = 1/\\max(1,p/P)$, P = {P_eff}")
     for n in ns:
         x, y = serie(filas, n, "eficiencia")
         ax.plot(x, y, "o-", color=COLORES[n], label=f"n = {int(n)}")

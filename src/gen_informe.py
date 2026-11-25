@@ -81,7 +81,7 @@ def main():
     # error relativo medio del ajuste teorico
     def t_teo(p, n):
         W = T_MAX * (n * 0.75) * D_FEATURES * H_HIDDEN
-        return coef["c1"] * math.ceil(p / P) * W + coef["c2"] * (math.log2(p) if p > 1 else 0) + coef["c3"]
+        return coef["c1"] * max(1.0, p / P) * W + coef["c2"] * (math.log2(p) if p > 1 else 0) + coef["c3"]
     err = sum(abs(t_teo(int(r["p"]), int(r["n"])) - r["T_p"]) / r["T_p"] for r in filas) / len(filas) * 100
     gflops_max = max(r["flops_por_seg"] for r in filas) / 1e9
     comm32 = r32["t_comm"] if r32 else 0
@@ -398,9 +398,9 @@ El tiempo de comunicación incluye la creación de los procesos, el envío de lo
 
 \subsection{Comparación con la expresión teórica}
 
-El modelo PRAM supone procesadores ilimitados. Para comparar con la máquina real hay que añadir un factor que refleje que solo hay $P$ núcleos: con $p$ procesos sobre $P$ núcleos, cada núcleo ejecuta $\lceil p/P \rceil$ entrenamientos en serie. Normalizamos entonces la expresión $O(\cdot)$ a segundos con tres constantes de proporcionalidad:
+El modelo PRAM supone procesadores ilimitados. Para comparar con la máquina real hay que añadir un factor que refleje que solo hay $P$ núcleos: con $p$ procesos sobre $P$ núcleos, a cada núcleo le toca atender $p/P$ procesos, y el tiempo se alarga en esa proporción cuando $p > P$. Se usa $\max(1, p/P)$ y no $\lceil p/P \rceil$ porque el planificador del sistema operativo intercala los procesos en lugar de ejecutarlos en tandas rígidas, de modo que la transición es continua. Normalizamos entonces la expresión $O(\cdot)$ a segundos con tres constantes de proporcionalidad:
 \[
-T_p(n,p) \;=\; c_1 \left\lceil \frac{p}{P} \right\rceil T_{max}\, n_{train}\, d\, h \;+\; c_2 \log_2 p \;+\; c_3 ,
+T_p(n,p) \;=\; c_1 \max\!\left(1, \frac{p}{P}\right) T_{max}\, n_{train}\, d\, h \;+\; c_2 \log_2 p \;+\; c_3 ,
 \]
 donde el primer término es el entrenamiento, el segundo la reducción y el tercero el costo fijo de arranque. Ajustando $c_1$, $c_2$ y $c_3$ por mínimos cuadrados sobre todas las mediciones se obtiene
 \[
@@ -414,7 +414,7 @@ con un error relativo medio de @@ERR@@\,\% respecto a los datos experimentales. 
 \caption{Curva teórica superpuesta a la experimental. Los puntos son mediciones y las líneas el modelo ajustado.}
 \end{figure}
 
-La curva teórica reproduce las dos regiones observadas: la zona plana mientras $p \le P$ y el crecimiento lineal cuando $p > P$. Esto confirma que la discrepancia con el PRAM ideal no viene del algoritmo, sino del número limitado de núcleos: el término $\lceil p/P \rceil$ es exactamente la parte que el modelo PRAM no considera.
+La curva teórica reproduce las dos regiones observadas: la zona plana mientras $p \le P$ y el crecimiento lineal cuando $p > P$, con el codo situado exactamente en $p = P$. Esto confirma que la discrepancia con el PRAM ideal no viene del algoritmo, sino del número limitado de núcleos: el término $\max(1, p/P)$ es exactamente la parte que el modelo PRAM no considera.
 
 \subsection{Speedup y eficiencia}
 
@@ -430,9 +430,9 @@ La curva teórica reproduce las dos regiones observadas: la zona plana mientras 
 \caption{Eficiencia $E_p = S_p/p$.}
 \end{figure}
 
-@@SPEEDUP@@ Este techo es el esperado: si todos los núcleos están ocupados, agregar más procesos no agrega capacidad de cómputo, solo reparte el mismo tiempo de CPU entre más tareas. Sustituyendo $\lceil p/P\rceil$ en la definición de speedup,
+@@SPEEDUP@@ Este techo es el esperado: si todos los núcleos están ocupados, agregar más procesos no agrega capacidad de cómputo, solo reparte el mismo tiempo de CPU entre más tareas. Sustituyendo $\max(1,p/P)$ en la definición de speedup,
 \[
-S_p \;=\; \frac{p\,T_{MLP}}{\lceil p/P\rceil\,T_{MLP}} \;=\; \frac{p}{\lceil p/P \rceil} \;\le\; P ,
+S_p \;=\; \frac{p\,T_{MLP}}{\max(1,p/P)\,T_{MLP}} \;=\; \frac{p}{\max(1, p/P)} \;=\; \min(p, P) \;\le\; P ,
 \]
 que es precisamente la curva medida. @@EFI@@
 
